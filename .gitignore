@@ -1,0 +1,17 @@
+# Climate service
+services/climate/.cache/
+node_modules/
+.env
+
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+.vs/
+*.sln
+*.VC.db
+*.opensdf
+*.sdf
+*.suo

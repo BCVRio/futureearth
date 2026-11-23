@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FutureEarth data console</title>
+<style>
+  :root { --bg:#0b0f12; --panel:#141b20; --line:#243038; --text:#e8eef1; --dim:#8b9aa3; --accent:#ff7a3d; --water:#3db4ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: .02em; }
+  p.sub { color: var(--dim); margin: 0 0 20px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:16px; }
+  label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+  input[type=number] { width:130px; padding:8px; background:var(--panel); border:1px solid var(--line); color:var(--text); border-radius:8px; font:inherit; }
+  button { padding:8px 14px; background:var(--panel); border:1px solid var(--line); color:var(--text); border-radius:8px; font:inherit; cursor:pointer; }
+  button[aria-pressed=true] { border-color:var(--accent); color:var(--accent); }
+  .year { display:flex; align-items:baseline; gap:12px; margin: 8px 0 2px; }
+  .year b { font-size:56px; font-weight:700; font-variant-numeric: tabular-nums; }
+  .year span { color:var(--dim); }
+  input[type=range] { width:100%; accent-color: var(--accent); }
+  .badge { display:inline-block; padding:2px 10px; border-radius:99px; font-size:12px; border:1px solid var(--line); color:var(--dim); }
+  .badge.low-confidence { color:#ffd166; border-color:#ffd166; }
+  .badge.extrapolated { color:var(--accent); border-color:var(--accent); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin-top:18px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .card h2 { font-size:12px; font-weight:500; color:var(--dim); margin:0 0 6px; }
+  .card .v { font-size:26px; font-weight:650; font-variant-numeric: tabular-nums; }
+  .card .n { font-size:12px; color:var(--dim); margin-top:2px; }
+  .dial { height:6px; background:var(--line); border-radius:3px; margin-top:10px; overflow:hidden; }
+  .dial i { display:block; height:100%; background:var(--accent); }
+  .dial.water i { background:var(--water); }
+  #status { color:var(--dim); min-height:1.4em; margin-top:14px; }
+  ul { color:var(--dim); font-size:13px; padding-left:18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>FutureEarth data console</h1>
+  <p class="sub">The numbers that drive the Unreal scene, for any place and year.</p>
+
+  <div class="row">
+    <div><label for="lat">Latitude</label><input id="lat" type="number" step="0.01" value="25.79"></div>
+    <div><label for="lon">Longitude</label><input id="lon" type="number" step="0.01" value="-80.13"></div>
+    <button id="go">Load place</button>
+    <button id="here">Use my location</button>
+  </div>
+  <div class="row" id="scenarios"></div>
+
+  <div class="year"><b id="yearText">2076</b><span id="ahead"></span> <span id="conf" class="badge"></span></div>
+  <input id="year" type="range" min="2026" max="2526" value="2076" aria-label="Year">
+
+  <div id="status"></div>
+  <div class="grid" id="cards"></div>
+  <ul id="caveats"></ul>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { scenario: 'ssp245', loaded: false, seq: 0 };
+const NOW = new Date().getFullYear();
+
+function card(title, value, note, dial, water) {
+  return `<div class="card"><h2>${title}</h2><div class="v">${value}</div><div class="n">${note ?? ''}</div>`
+    + (dial == null ? '' : `<div class="dial ${water ? 'water' : ''}"><i style="width:${Math.round(dial * 100)}%"></i></div>`) + `</div>`;
+}
+
+async function refresh() {
+  const year = Number($('year').value);
+  $('yearText').textContent = year;
+  $('ahead').textContent = `${year - NOW} years from now`;
+  if (!state.loaded) return;
+  const seq = ++state.seq;
+  const q = new URLSearchParams({ lat: $('lat').value, lon: $('lon').value, year, scenario: state.scenario });
+  try {
+    const res = await fetch('/future?' + q);
+    const f = await res.json();
+    if (seq !== state.seq) return;
+    if (!res.ok) throw new Error(f.error);
+    $('status').textContent = `Elevation ${f.location.elevation_m} m · ${f.scenario.detail}`;
+    $('conf').textContent = f.confidence.level; $('conf').className = 'badge ' + f.confidence.level; $('conf').title = f.confidence.note;
+    const g = f.global, l = f.local, v = f.visual, s = g.sea_level_rise_m;
+    $('cards').innerHTML = [
+      card('Global warming', `+${g.warming_c_above_preindustrial} °C`, 'above pre-industrial'),
+      card('Local warming', `+${l.warming_c_above_baseline} °C`, `mean ${l.mean_temp_c} °C (was ${l.baseline.mean_temp_c})`),
+      card('Sea level', `+${s.median} m`, `likely ${s.low} to ${s.high} m`, Math.min(1, s.median / 8), true),
+      card('Flood depth here', v.flood_depth_m == null ? 'n/a' : `${v.flood_depth_m} m`, v.inundated ? 'below projected sea level' : 'above projected sea level', v.flood_depth_m == null ? 0 : Math.min(1, v.flood_depth_m / 8), true),
+      card(`Days over ${l.hot_day_threshold_c} °C`, l.hot_days_per_year, `was ${l.baseline.hot_days_per_year} per year`, v.heat_stress),
+      card('Rainfall', `${l.precip_change_pct > 0 ? '+' : ''}${l.precip_change_pct} %`, `${l.precip_mm_per_year} mm per year`),
+      card('Aridity', v.aridity, 'scene dial', v.aridity),
+      card('Vegetation dieback', v.vegetation_dieback, 'scene dial', v.vegetation_dieback),
+      card('Fire risk', v.fire_risk, 'scene dial', v.fire_risk),
+    ].join('');
+    $('caveats').innerHTML = f.caveats.map((c) => `<li>${c}</li>`).join('');
+  } catch (e) {
+    if (seq === state.seq) $('status').textContent = 'Could not load: ' + e.message;
+  }
+}
+
+async function load() {
+  state.loaded = true;
+  $('status').textContent = 'Fetching 60 years of model data for this place (first time can take a minute)…';
+  $('cards').innerHTML = '';
+  await refresh();
+}
+
+fetch('/scenarios').then((r) => r.json()).then(({ scenarios }) => {
+  $('scenarios').innerHTML = Object.entries(scenarios).map(([id, s]) =>
+    `<button data-id="${id}" aria-pressed="${id === state.scenario}" title="${s.detail}">${s.label}</button>`).join('');
+  $('scenarios').onclick = (e) => {
+    const id = e.target.dataset.id; if (!id) return;
+    state.scenario = id;
+    for (const b of $('scenarios').children) b.setAttribute('aria-pressed', b.dataset.id === id);
+    refresh();
+  };
+});
+$('year').oninput = refresh;
+$('go').onclick = load;
+$('here').onclick = () => navigator.geolocation.getCurrentPosition((p) => {
+  $('lat').value = p.coords.latitude.toFixed(2); $('lon').value = p.coords.longitude.toFixed(2); load();
+}, (e) => { $('status').textContent = 'Location unavailable: ' + e.message; });
+refresh();
+</script>
+</body>
+</html>

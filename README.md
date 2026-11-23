@@ -1,0 +1,46 @@
+# FutureEarth
+
+Hold up a phone and see the place you are standing in as climate change will leave it, anywhere on Earth, from now to 500 years ahead.
+
+## Architecture
+
+```
+Phone (Android first)                Cloud GPU (rented)                    Data
+---------------------                ---------------------------           ---------------------------
+ARCore Geospatial pose  --WebRTC-->  Unreal Engine 5.8                     services/climate  (this repo)
+(lat, lon, alt, heading)             Cesium + Google Photorealistic        IPCC AR6 + CMIP6 + elevation
+Time slider, scenario                3D Tiles = the real world's geometry  -> one FutureState per
+Full-screen video       <--video---  Water, decay, foliage, sky driven        place / year / scenario
+                                     by FutureState; Pixel Streaming out
+```
+
+- The phone stays thin: it tracks where it is and where it points, and shows the stream. Photoreal rendering (Lumen, Nanite, water) happens on the cloud GPU, so one GPU serves one viewer at a time.
+- The same stream works on a mixed reality headset later; only the pose source changes.
+- Hero sites get hand-built Unreal levels that replace the generic 3D tiles at those coordinates.
+
+## Climate service
+
+```
+node services/climate/server.mjs      # http://localhost:8787  (Node 18+, no dependencies)
+GET /future?lat=25.79&lon=-80.13&year=2076&scenario=ssp245
+```
+
+Scenarios: `ssp126` best case, `ssp245` current path, `ssp585` worst case. Years 2020 to 2526.
+Each response carries a `confidence` level: `projected` (to 2100), `low-confidence` (to 2300), `extrapolated` (after 2300).
+The `visual` block (`water_level_m`, `aridity`, `vegetation_dieback`, `fire_risk`, `heat_stress`) is what Unreal reads.
+
+Open http://localhost:8787 for a console that scrubs time for any coordinates.
+
+## Unreal project
+
+`unreal/FutureEarth/FutureEarth.uproject` (UE 5.8, C++). Plugins on: Pixel Streaming 2, Water, GeoReferencing, SunPosition.
+
+- `UClimateSubsystem` fetches a `FClimateFutureState` from the climate service (URL in `Config/DefaultGame.ini`).
+- `AFutureWorldDirector` is placed in a level with a latitude, longitude, year and scenario. It raises `SeaSurfaceActor` to the projected water level and writes `HeatStress`, `Aridity`, `VegetationDieback`, `FireRisk`, `WaterLevelM` and `LocalWarmingC` into a Material Parameter Collection.
+
+```
+Build:  <UE>\Engine\Build\BatchFiles\Build.bat FutureEarthEditor Win64 Development -Project=<path>\FutureEarth.uproject
+Test:   UnrealEditor-Cmd <path>\FutureEarth.uproject -ExecCmds="Automation RunTests FutureEarth; Quit" -unattended -nullrhi
+```
+
+Known limits are listed in each response under `caveats`; the global anchor tables in `projections.mjs` still need checking against the published IPCC tables.
