@@ -62,4 +62,10 @@ Setup, once per machine:
 1. Unpack the UE 5.8 build of [Cesium for Unreal](https://github.com/CesiumGS/cesium-unreal/releases) into `unreal/FutureEarth/Plugins/CesiumForUnreal` (not committed; about 5 GB). The first project build compiles it and takes a while.
 2. Create a Google Maps Platform API key with **Map Tiles API** enabled and put it in the `GOOGLE_MAPS_API_KEY` environment variable. The key is applied to tilesets tagged `GoogleTiles` at runtime and is never written into a level or this repository.
 
+### Look
+
+- `M_Water`: single-layer water with drifting wave normals and depth-based colour.
+- `M_ClimatePost`: a post-process pass, so it works on any geometry including map tiles. Vegetation browns with `VegetationDieback`, surfaces dust over with `Aridity`, and a wet tide line sits just above the risen water.
+- `Scripts/rebuild_and_capture.ps1` rebuilds, regenerates both levels and refreshes the four reference captures in `design/captures`.
+
 Known limits are listed in each response under `caveats`; the global anchor tables in `projections.mjs` still need checking against the published IPCC tables.

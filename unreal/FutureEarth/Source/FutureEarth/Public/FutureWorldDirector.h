@@ -52,7 +52,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
 	double PresentSeaLevelZ = 0.0;
 
-	/** Receives scalars HeatStress, Aridity, VegetationDieback, FireRisk, WaterLevelM, LocalWarmingC. */
+	/** Receives scalars HeatStress, Aridity, VegetationDieback, FireRisk, WaterLevelM, LocalWarmingC, WaterSurfaceZ. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
 	TObjectPtr<UMaterialParameterCollection> ClimateParameters;
 

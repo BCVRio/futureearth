@@ -8,6 +8,15 @@ import random
 import unreal
 
 PKG = '/Game/FutureEarth'
+
+
+def make(cls, **props):
+    """Create an Unreal struct/object and set its properties (constructors take no arguments here)."""
+    obj = cls()
+    for k, v in props.items():
+        obj.set_editor_property(k, v)
+    return obj
+
 MAP = PKG + '/Maps/TestStreet'
 
 eal = unreal.EditorAssetLibrary
@@ -32,7 +41,7 @@ def color(r, g, b):
 
 
 # --- Material Parameter Collection: the dials the director writes ------------
-DIALS = ['HeatStress', 'Aridity', 'VegetationDieback', 'FireRisk', 'WaterLevelM', 'LocalWarmingC']
+DIALS = ['HeatStress', 'Aridity', 'VegetationDieback', 'FireRisk', 'WaterLevelM', 'LocalWarmingC', 'WaterSurfaceZ']
 mpc = fresh('MPC_Climate', unreal.MaterialParameterCollection, unreal.MaterialParameterCollectionFactoryNew())
 params = []
 for dial in DIALS:
@@ -92,12 +101,90 @@ facades = [
     instance('MI_Facade_Dark', m_facade, color(0.16, 0.17, 0.19)),
 ]
 
-# Still, dark, mirror-like water.
+# Water: Unreal's single-layer-water shading (depth-coloured, refractive) with two
+# layers of slowly drifting wave normals projected in world space.
+P = unreal.MaterialProperty
 m_water = fresh('M_Water', unreal.Material, unreal.MaterialFactoryNew())
-mel.connect_material_property(node(m_water, unreal.MaterialExpressionConstant3Vector, -400, 0, constant=color(0.010, 0.030, 0.035)), '', unreal.MaterialProperty.MP_BASE_COLOR)
-mel.connect_material_property(node(m_water, unreal.MaterialExpressionConstant, -400, 150, r=0.04), '', unreal.MaterialProperty.MP_ROUGHNESS)
-mel.connect_material_property(node(m_water, unreal.MaterialExpressionConstant, -400, 250, r=0.6), '', unreal.MaterialProperty.MP_METALLIC)
+m_water.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_SINGLE_LAYER_WATER)
+waves = unreal.load_asset('/Water/Textures/Normals/T_Water_TilingNormal_Waves_02')
+if not waves:
+    raise RuntimeError('Water plugin wave normal texture not found')
+wpos = node(m_water, unreal.MaterialExpressionWorldPosition, -1500, 0)
+xy = node(m_water, unreal.MaterialExpressionComponentMask, -1300, 0, r=True, g=True, b=False, a=False)
+mel.connect_material_expressions(wpos, '', xy, '')
+layers = []
+for i, (tile_cm, sx, sy) in enumerate([(900.0, 0.010, 0.004), (2300.0, -0.004, 0.006)]):
+    scale = node(m_water, unreal.MaterialExpressionMultiply, -1100, i * 250, const_b=1.0 / tile_cm)
+    mel.connect_material_expressions(xy, '', scale, 'A')
+    pan = node(m_water, unreal.MaterialExpressionPanner, -900, i * 250, speed_x=sx, speed_y=sy)
+    mel.connect_material_expressions(scale, '', pan, 'Coordinate')
+    tex = node(m_water, unreal.MaterialExpressionTextureSample, -700, i * 250,
+               texture=waves, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    mel.connect_material_expressions(pan, '', tex, 'UVs')
+    layers.append(tex)
+both = node(m_water, unreal.MaterialExpressionAdd, -450, 100)
+mel.connect_material_expressions(layers[0], 'RGB', both, 'A')
+mel.connect_material_expressions(layers[1], 'RGB', both, 'B')
+up = node(m_water, unreal.MaterialExpressionConstant3Vector, -450, 300, constant=color(0, 0, 1))
+calm = node(m_water, unreal.MaterialExpressionLinearInterpolate, -250, 150, const_alpha=0.22)
+mel.connect_material_expressions(up, '', calm, 'A')
+mel.connect_material_expressions(both, '', calm, 'B')
+norm = node(m_water, unreal.MaterialExpressionNormalize, -100, 150)
+mel.connect_material_expressions(calm, '', norm, 'VectorInput')
+mel.connect_material_property(norm, '', P.MP_NORMAL)
+mel.connect_material_property(node(m_water, unreal.MaterialExpressionConstant3Vector, -400, -300, constant=color(0, 0, 0)), '', P.MP_BASE_COLOR)
+mel.connect_material_property(node(m_water, unreal.MaterialExpressionConstant, -400, -200, r=0.06), '', P.MP_ROUGHNESS)
+mel.connect_material_property(node(m_water, unreal.MaterialExpressionConstant, -400, -120, r=1.0), '', P.MP_SPECULAR)
+slw = node(m_water, unreal.MaterialExpressionSingleLayerWaterMaterialOutput, 100, 400)
+# Per-cm coefficients: silty flood water that turns opaque green-brown within a few metres.
+mel.connect_material_expressions(node(m_water, unreal.MaterialExpressionConstant3Vector, -300, 400, constant=color(0.0030, 0.0034, 0.0022)), '', slw, 'ScatteringCoefficients')
+mel.connect_material_expressions(node(m_water, unreal.MaterialExpressionConstant3Vector, -300, 520, constant=color(0.0075, 0.0040, 0.0048)), '', slw, 'AbsorptionCoefficients')
+mel.connect_material_expressions(node(m_water, unreal.MaterialExpressionConstant, -300, 640, r=0.3), '', slw, 'PhaseG')
 mel.recompile_material(m_water)
+
+# Post-process pass that makes ANY geometry (grey-box, map tiles, hero sites) respond to
+# the climate dials: vegetation browns with VegetationDieback, surfaces dust over with
+# Aridity, and a dark wet tide line appears just above the risen water.
+m_post = fresh('M_ClimatePost', unreal.Material, unreal.MaterialFactoryNew())
+m_post.set_editor_property('material_domain', unreal.MaterialDomain.MD_POST_PROCESS)
+scene = node(m_post, unreal.MaterialExpressionSceneTexture, -900, -200, scene_texture_id=unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
+albedo = node(m_post, unreal.MaterialExpressionSceneTexture, -900, 0, scene_texture_id=unreal.SceneTextureId.PPI_BASE_COLOR)
+depth = node(m_post, unreal.MaterialExpressionSceneTexture, -900, 200, scene_texture_id=unreal.SceneTextureId.PPI_SCENE_DEPTH)
+pp_pos = node(m_post, unreal.MaterialExpressionWorldPosition, -900, 400)
+grade = node(m_post, unreal.MaterialExpressionCustom, -400, 0)
+grade.set_editor_property('output_type', unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+names = ['Color', 'Albedo', 'Depth', 'WorldPos', 'Dieback', 'Aridity', 'WaterZ', 'WaterLevelM']
+grade.set_editor_property('inputs', [make(unreal.CustomInput, input_name=n) for n in names])
+grade.set_editor_property('code', """
+float3 c = Color.rgb;
+float solid = step(Depth.r, 3000000.0);                 // 0 on the sky
+float lum = dot(c, float3(0.30, 0.59, 0.11));
+float green = saturate((Albedo.g - max(Albedo.r, Albedo.b)) * 7.0);
+c = lerp(c, lum * float3(1.28, 1.00, 0.58), green * Dieback * solid);
+c = lerp(c, lum * float3(1.12, 1.00, 0.80), Aridity * 0.45 * solid);
+float h = WorldPos.z - WaterZ;                          // cm above the water surface
+float flooded = saturate(WaterLevelM / 0.3);
+float stain = saturate(1.0 - h / 160.0) * step(3.0, h) * flooded * solid;
+c *= lerp(float3(1, 1, 1), float3(0.42, 0.45, 0.40), stain);
+return c;
+""")
+mel.connect_material_expressions(scene, 'Color', grade, 'Color')
+mel.connect_material_expressions(albedo, 'Color', grade, 'Albedo')
+mel.connect_material_expressions(depth, 'Color', grade, 'Depth')
+mel.connect_material_expressions(pp_pos, '', grade, 'WorldPos')
+for i, (pin, dial) in enumerate([('Dieback', 'VegetationDieback'), ('Aridity', 'Aridity'), ('WaterZ', 'WaterSurfaceZ'), ('WaterLevelM', 'WaterLevelM')]):
+    mel.connect_material_expressions(dial_node(m_post, dial, -900, 600 + i * 120), '', grade, pin)
+mel.connect_material_property(grade, '', P.MP_EMISSIVE_COLOR)
+mel.recompile_material(m_post)
+
+
+def add_climate_post():
+    volume = actors.spawn_actor_from_class(unreal.PostProcessVolume, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    volume.set_actor_label('ClimatePost')
+    volume.set_editor_property('unbound', True)
+    settings = volume.get_editor_property('settings')
+    settings.set_editor_property('weighted_blendables', make(unreal.WeightedBlendables, array=[make(unreal.WeightedBlendable, weight=1.0, object=m_post)]))
+    volume.set_editor_property('settings', settings)
 
 # --- Level -------------------------------------------------------------------
 if not levels.new_level(MAP):
@@ -151,6 +238,8 @@ spawn(unreal.ExponentialHeightFog, 'Fog')
 spawn(unreal.VolumetricCloud, 'Clouds')
 # Eye height is a third-floor balcony so the view stays above water at every year.
 spawn(unreal.PlayerStart, 'PlayerStart', (-4600, -250, 1000), (0, 0, 4))
+
+add_climate_post()
 
 director = spawn(unreal.FutureWorldDirector, 'FutureWorldDirector', (0, 0, 100))
 director.set_editor_property('latitude', 25.79)

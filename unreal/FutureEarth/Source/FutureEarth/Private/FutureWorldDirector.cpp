@@ -94,6 +94,8 @@ void AFutureWorldDirector::HandleState(const FClimateFutureState& State)
 		Set(TEXT("FireRisk"), State.FireRisk);
 		Set(TEXT("WaterLevelM"), State.WaterLevelM);
 		Set(TEXT("LocalWarmingC"), State.LocalWarmingC);
+		// World Z (cm) of the water surface, for effects such as the tide line. Far below when there is no sea.
+		Set(TEXT("WaterSurfaceZ"), SeaSurfaceActor ? SeaSurfaceActor->GetActorLocation().Z : -1.0e7);
 	}
 
 	UE_LOG(LogTemp, Display, TEXT("FutureEarth applied: year=%d water_level_m=%.2f sea_z=%.1f aridity=%.2f dieback=%.2f heat=%.2f"),

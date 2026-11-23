@@ -13,6 +13,15 @@ import urllib.request
 import unreal
 
 PKG = '/Game/FutureEarth'
+
+
+def make(cls, **props):
+    """Create an Unreal struct/object and set its properties (constructors take no arguments here)."""
+    obj = cls()
+    for k, v in props.items():
+        obj.set_editor_property(k, v)
+    return obj
+
 MAP = PKG + '/Maps/RealWorld'
 
 # Ocean Drive, Miami Beach. Heights are metres above the WGS84 ellipsoid, which is
@@ -33,8 +42,9 @@ if eal.does_asset_exist(MAP):
     raise RuntimeError(MAP + ' already exists. Delete it on disk and run again.')
 mpc = unreal.load_asset(PKG + '/MPC_Climate')
 water = unreal.load_asset(PKG + '/M_Water')
-if not mpc or not water:
-    raise RuntimeError('Run build_test_street.py first; it creates MPC_Climate and M_Water.')
+post = unreal.load_asset(PKG + '/M_ClimatePost')
+if not mpc or not water or not post:
+    raise RuntimeError('Run build_test_street.py first; it creates MPC_Climate, M_Water and M_ClimatePost.')
 if not levels.new_level(MAP):
     raise RuntimeError('Could not create level ' + MAP)
 
@@ -52,6 +62,7 @@ tiles = spawn(unreal.Cesium3DTileset, 'GoogleTiles')
 tiles.set_editor_property('tileset_source', unreal.TilesetSource.FROM_URL)
 tiles.set_editor_property('tags', ['GoogleTiles'])   # the director puts the keyed URL on tagged tilesets
 tiles.set_editor_property('georeference', georef)
+tiles.set_editor_property('maximum_screen_space_error', 6.0)   # default 16; lower = sharper, more tile requests
 
 sea = spawn(unreal.StaticMeshActor, 'SeaSurface', (0, 0, -GROUND_ABOVE_SEA_M * 100))
 sea.set_mobility(unreal.ComponentMobility.MOVABLE)
@@ -68,11 +79,18 @@ sky.light_component.set_editor_property('real_time_capture', True)
 spawn(unreal.ExponentialHeightFog, 'Fog')
 spawn(unreal.VolumetricCloud, 'Clouds')
 # Second-floor eye height on the beach side of the street, looking north along it.
-spawn(unreal.PlayerStart, 'PlayerStart', (0, 0, 900), (0, 0, -90))
+spawn(unreal.PlayerStart, 'PlayerStart', (0, 0, 2500), (0, 0, -90))
 # A fixed camera owns the view, so mouse movement over the window cannot steer it.
-camera = spawn(unreal.CameraActor, 'ViewCamera', (0, 0, 900), (0, -10, -90))
+# Photogrammetry tiles hold up from rooftop height, not at eye level.
+camera = spawn(unreal.CameraActor, 'ViewCamera', (0, 0, 2500), (0, -16, -90))
 camera.set_editor_property('auto_activate_for_player', unreal.AutoReceiveInput.PLAYER0)
 camera.camera_component.set_editor_property('constrain_aspect_ratio', False)
+
+volume = spawn(unreal.PostProcessVolume, 'ClimatePost')
+volume.set_editor_property('unbound', True)
+settings = volume.get_editor_property('settings')
+settings.set_editor_property('weighted_blendables', make(unreal.WeightedBlendables, array=[make(unreal.WeightedBlendable, weight=1.0, object=post)]))
+volume.set_editor_property('settings', settings)
 
 director = spawn(unreal.FutureWorldDirector, 'FutureWorldDirector', (0, 0, 100))
 director.set_editor_property('latitude', LAT)
