@@ -75,6 +75,8 @@ Streams the scene from this PC to a phone browser on the same Wi-Fi with Pixel S
 
 `phone/futureearth-phone.js` sends the phone orientation as East-North-Up vectors; `AFutureWorldDirector::SetViewDirectionENU` applies them. iPhones need https for motion sensors, so the script makes a self-signed certificate for the PC's LAN address.
 
+**Where you are.** "Use my location" on the phone page sends the phone's GPS position; `AFutureWorldDirector::RelocateTo` re-centres the Cesium georeference there, loads that place's climate and stands the view on the ground at eye height (it probes the streamed tiles for the lowest nearby surface). `-FutureLat=.. -FutureLon=..` does the same from the command line.
+
 ### Look
 
 - `M_Water`: single-layer water with drifting wave normals and depth-based colour.

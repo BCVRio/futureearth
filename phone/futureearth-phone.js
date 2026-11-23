@@ -53,6 +53,7 @@
     return b;
   };
   const motion = button('Enable motion');
+  const here = button('Use my location');
   const note = document.createElement('div');
   note.style.cssText = 'position:fixed;top:60px;right:12px;z-index:9999;max-width:70vw;padding:8px 12px;border-radius:12px;background:rgba(8,12,15,.72);color:#fff;font:13px system-ui,sans-serif;display:none';
   const say = (text) => { note.textContent = text; note.style.display = text ? 'block' : 'none'; };
@@ -80,6 +81,23 @@
     } catch (err) {
       startDrag(window.isSecureContext ? 'Motion is unavailable.' : 'Motion needs an https:// address.');
     }
+  });
+
+  // Ask for the phone's position once and move the scene there. Sent a few times because
+  // the first message can be lost while the stream is still connecting.
+  here.addEventListener('click', () => {
+    if (!navigator.geolocation) return say('This browser cannot provide a location.');
+    here.textContent = 'Locating\u2026';
+    navigator.geolocation.getCurrentPosition((p) => {
+      const place = { lat: Math.round(p.coords.latitude * 1e6) / 1e6, lon: Math.round(p.coords.longitude * 1e6) / 1e6 };
+      try { window.pixelStreaming.emitUIInteraction(place); } catch (_) { /* not connected */ }
+      here.textContent = 'You are here';
+      say('Moving to your location (accurate to about ' + Math.round(p.coords.accuracy) + ' m). A new place can take a minute to load.');
+      setTimeout(() => say(''), 9000);
+    }, (err) => {
+      here.textContent = 'Use my location';
+      say('Location unavailable: ' + err.message);
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   });
 
   // Drag-to-look fallback: only drags that start in the upper 55% of the screen, so the

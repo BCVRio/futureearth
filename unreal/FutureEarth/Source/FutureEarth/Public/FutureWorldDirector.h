@@ -83,6 +83,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
 	void SetViewDirectionENU(FVector Forward, FVector Up);
 
+	/**
+	 * Move the whole experience to a real place: re-centres the Cesium georeference there,
+	 * requests that place's climate, and stands the view on the ground at eye height.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
+	void RelocateTo(double NewLatitude, double NewLongitude);
+
+	/** Height of the viewer's eyes above the ground after RelocateTo, in cm. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
+	double EyeHeightCm = 165.0;
+
 	/** Re-request the state for the current place, year and scenario. */
 	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
 	void Refresh();
@@ -103,6 +114,12 @@ private:
 	void ApplyMapTilesKey();
 	void ShowHud();
 	void ListenForPhone();
+	void RecentreGeoreference(double OriginHeightM);
+	void ProbeGround();
+
+	bool bRelocating = false;
+	int32 GroundProbesLeft = 0;
+	FTimerHandle GroundProbeTimer;
 
 	UFUNCTION()
 	void HandlePhoneMessage(const FString& Descriptor);

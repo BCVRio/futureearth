@@ -121,3 +121,17 @@ export async function localPattern(lat, lon) {
 }
 
 function round(v, d) { const f = 10 ** d; return Math.round(v * f) / f; }
+
+const elevations = new Map();
+
+/** Terrain elevation in metres above mean sea level at the exact point (cached, ~10 m grid). */
+export async function elevationAt(lat, lon) {
+  const key = `${lat.toFixed(4)}_${lon.toFixed(4)}`;
+  if (!elevations.has(key)) {
+    const promise = getJson(`https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`)
+      .then((r) => r.elevation?.[0] ?? null);
+    elevations.set(key, promise);
+    promise.catch(() => elevations.delete(key));
+  }
+  return elevations.get(key);
+}

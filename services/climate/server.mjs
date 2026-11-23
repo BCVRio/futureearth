@@ -14,7 +14,7 @@ import {
   SCENARIOS, MIN_YEAR, MAX_YEAR, BASELINE_GLOBAL_WARMING,
   globalWarming, seaLevelRise, confidence,
 } from './projections.mjs';
-import { localPattern, hotDays, HOT_DAY_C } from './local.mjs';
+import { localPattern, hotDays, HOT_DAY_C, elevationAt } from './local.mjs';
 import egm96 from 'egm96-universal';
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -24,6 +24,8 @@ const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 export async function futureState(lat, lon, year, scenario) {
   const p = await localPattern(lat, lon);
+  // The climate pattern is per ~5 km cell, but height matters metre by metre: use the exact point.
+  const elevation = await elevationAt(lat, lon).catch(() => p.elevation_m);
   const gw = globalWarming(scenario, year);
   const localWarming = p.amplification * Math.max(0, gw - BASELINE_GLOBAL_WARMING);
   const precipPct = Math.max(-90, p.precip_pct_per_degc * Math.max(0, gw - BASELINE_GLOBAL_WARMING));
@@ -36,11 +38,11 @@ export async function futureState(lat, lon, year, scenario) {
   // physical numbers above into 0..1 dials for materials, foliage and weather.
   const heat = clamp01(hotThen / 120);
   const drying = clamp01(-precipPct / 40 + localWarming / 12);
-  const floodDepth = p.elevation_m == null ? null : Math.max(0, slr.median - p.elevation_m);
+  const floodDepth = elevation == null ? null : Math.max(0, slr.median - elevation);
 
   return {
     location: {
-      lat: p.lat, lon: p.lon, elevation_m: p.elevation_m,
+      lat, lon, elevation_m: elevation,
       // Height of today's mean sea level above the WGS84 ellipsoid (EGM96 geoid). 3D map
       // tiles use ellipsoid heights, so the sea surface belongs at this height plus the rise.
       geoid_height_m: round(egm96.meanSeaLevel(lat, lon)),

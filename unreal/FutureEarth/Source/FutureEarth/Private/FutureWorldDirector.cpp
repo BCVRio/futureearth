@@ -6,6 +6,9 @@
 #include "Engine/GameViewportClient.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/ActorComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "TimerManager.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -31,6 +34,12 @@ void AFutureWorldDirector::BeginPlay()
 	FParse::Value(FCommandLine::Get(), TEXT("FutureYear="), Year);
 	ApplyMapTilesKey();
 	ListenForPhone();
+	// Test override: -FutureLat=45.434 -FutureLon=12.339 starts at that place, as a phone would.
+	double StartLat = 0.0, StartLon = 0.0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("FutureLat="), StartLat) && FParse::Value(FCommandLine::Get(), TEXT("FutureLon="), StartLon))
+	{
+		RelocateTo(StartLat, StartLon);
+	}
 	if (bShowHud && !FParse::Param(FCommandLine::Get(), TEXT("FutureEarthNoHud")))
 	{
 		ShowHud();
@@ -94,6 +103,15 @@ void AFutureWorldDirector::HandleState(const FClimateFutureState& State)
 {
 	LastState = State;
 	bHasState = true;
+
+	if (bRelocating)
+	{
+		bRelocating = false;
+		// World Z = 0 becomes the terrain model's ground height here; the probe below refines it.
+		RecentreGeoreference(State.GeoidHeightM + State.ElevationM);
+		GroundProbesLeft = 80;
+		GetWorldTimerManager().SetTimer(GroundProbeTimer, this, &AFutureWorldDirector::ProbeGround, 0.5f, true, 0.5f);
+	}
 
 	if (SeaSurfaceActor)
 	{
@@ -223,6 +241,12 @@ void AFutureWorldDirector::HandlePhoneMessage(const FString& Descriptor)
 	{
 		return;
 	}
+	double Lat = 0.0, Lon = 0.0;
+	if (Message->TryGetNumberField(TEXT("lat"), Lat) && Message->TryGetNumberField(TEXT("lon"), Lon))
+	{
+		RelocateTo(Lat, Lon);
+		return;
+	}
 	const TArray<TSharedPtr<FJsonValue>>* F = nullptr;
 	const TArray<TSharedPtr<FJsonValue>>* U = nullptr;
 	if (Message->TryGetArrayField(TEXT("f"), F) && Message->TryGetArrayField(TEXT("u"), U) && F->Num() == 3 && U->Num() == 3)
@@ -251,5 +275,75 @@ void AFutureWorldDirector::SetViewDirectionENU(FVector Forward, FVector Up)
 		{
 			Target->SetActorRotation(Rotation);
 		}
+	}
+}
+
+void AFutureWorldDirector::RelocateTo(double NewLatitude, double NewLongitude)
+{
+	if (!(FMath::Abs(NewLatitude) <= 90.0) || !(FMath::Abs(NewLongitude) <= 180.0))
+	{
+		return;
+	}
+	UE_LOG(LogTemp, Display, TEXT("FutureEarth: relocating to %.5f, %.5f"), NewLatitude, NewLongitude);
+	bRelocating = true;
+	bHasState = false; // The interface shows "Loading" until this place's climate arrives.
+	SetLocation(NewLatitude, NewLongitude);
+}
+
+void AFutureWorldDirector::RecentreGeoreference(double OriginHeightM)
+{
+	GeoreferenceOriginHeightM = OriginHeightM;
+	bSeaLevelFromGeoid = true;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (It->GetClass()->GetName() == TEXT("CesiumGeoreference"))
+		{
+			if (UFunction* SetOrigin = It->FindFunction(TEXT("SetOriginLongitudeLatitudeHeight")))
+			{
+				struct { FVector LongitudeLatitudeHeight; } Params{ FVector(Longitude, Latitude, OriginHeightM) };
+				It->ProcessEvent(SetOrigin, &Params);
+			}
+		}
+	}
+}
+
+void AFutureWorldDirector::ProbeGround()
+{
+	if (--GroundProbesLeft <= 0)
+	{
+		GetWorldTimerManager().ClearTimer(GroundProbeTimer);
+	}
+	APlayerController* Player = GetWorld()->GetFirstPlayerController();
+	AActor* View = Player ? Player->GetViewTarget() : nullptr;
+	if (!View)
+	{
+		return;
+	}
+
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(FutureEarthGround), /*bTraceComplex*/ true);
+	Query.AddIgnoredActor(this);
+	Query.AddIgnoredActor(View);
+	if (SeaSurfaceActor) { Query.AddIgnoredActor(SeaSurfaceActor); }
+	if (Player->GetPawn()) { Query.AddIgnoredActor(Player->GetPawn()); }
+
+	// Map tiles stream in over several seconds and GPS is a few metres out, so probe a
+	// small cross of points and stand on the lowest: that favours the street over a roof
+	// or a tree canopy next to it.
+	const double Reach = 600.0; // cm
+	const FVector2D Offsets[] = { {0, 0}, {Reach, 0}, {-Reach, 0}, {0, Reach}, {0, -Reach} };
+	double Lowest = TNumericLimits<double>::Max();
+	for (const FVector2D& Offset : Offsets)
+	{
+		FHitResult Hit;
+		const FVector Top(Offset.X, Offset.Y, 100000.0);
+		const FVector Bottom(Offset.X, Offset.Y, -100000.0);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Top, Bottom, ECC_Visibility, Query))
+		{
+			Lowest = FMath::Min(Lowest, Hit.ImpactPoint.Z);
+		}
+	}
+	if (Lowest < TNumericLimits<double>::Max())
+	{
+		View->SetActorLocation(FVector(0.0, 0.0, Lowest + EyeHeightCm));
 	}
 }
