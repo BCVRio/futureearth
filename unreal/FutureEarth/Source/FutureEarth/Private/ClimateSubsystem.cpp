@@ -113,6 +113,7 @@ bool UClimateSubsystem::ParseFutureState(const FString& Json, FClimateFutureStat
 	Number(Location, TEXT("lat"), Out.Latitude);
 	Number(Location, TEXT("lon"), Out.Longitude);
 	Number(Location, TEXT("elevation_m"), Out.ElevationM);
+	Number(Location, TEXT("geoid_height_m"), Out.GeoidHeightM);
 
 	double Year = 0.0;
 	Number(Root, TEXT("year"), Year);

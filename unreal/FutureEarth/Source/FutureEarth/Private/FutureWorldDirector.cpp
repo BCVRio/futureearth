@@ -2,6 +2,7 @@
 
 #include "ClimateSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "EngineUtils.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
@@ -20,6 +21,7 @@ void AFutureWorldDirector::BeginPlay()
 	Super::BeginPlay();
 	// Test overrides: -FutureYear=2526 on the command line.
 	FParse::Value(FCommandLine::Get(), TEXT("FutureYear="), Year);
+	ApplyMapTilesKey();
 	if (UClimateSubsystem* Climate = GetGameInstance() ? GetGameInstance()->GetSubsystem<UClimateSubsystem>() : nullptr)
 	{
 		Climate->OnFutureStateUpdated.AddDynamic(this, &AFutureWorldDirector::HandleState);
@@ -75,7 +77,8 @@ void AFutureWorldDirector::HandleState(const FClimateFutureState& State)
 	if (SeaSurfaceActor)
 	{
 		FVector Location = SeaSurfaceActor->GetActorLocation();
-		Location.Z = PresentSeaLevelZ + State.WaterLevelM * 100.0; // metres -> cm
+		const double SeaLevelZ = bSeaLevelFromGeoid ? (State.GeoidHeightM - GeoreferenceOriginHeightM) * 100.0 : PresentSeaLevelZ;
+		Location.Z = SeaLevelZ + State.WaterLevelM * 100.0; // metres -> cm
 		SeaSurfaceActor->SetActorLocation(Location);
 	}
 
@@ -123,5 +126,32 @@ void AFutureWorldDirector::Tick(float DeltaSeconds)
 	else if (CaptureShotFrame >= 0 && CaptureFrames >= CaptureShotFrame + 60)
 	{
 		FPlatformMisc::RequestExit(false);
+	}
+}
+
+void AFutureWorldDirector::ApplyMapTilesKey()
+{
+	// Google Photorealistic 3D Tiles need an API key in the tileset URL. The key is read
+	// from the environment at runtime and never saved into a level, so it cannot end up
+	// in source control. Tilesets opt in with the actor tag "GoogleTiles". Cesium is
+	// reached by reflection so this module builds without the plugin.
+	const FString Key = FPlatformMisc::GetEnvironmentVariable(TEXT("GOOGLE_MAPS_API_KEY"));
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		AActor* Tileset = *It;
+		if (Tileset->GetClass()->GetName() != TEXT("Cesium3DTileset") || !Tileset->ActorHasTag(TEXT("GoogleTiles")))
+		{
+			continue;
+		}
+		UFunction* SetUrl = Tileset->FindFunction(TEXT("SetUrl"));
+		if (Key.IsEmpty() || !SetUrl)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("FutureEarth: %s has no map tiles (%s)"), *Tileset->GetName(),
+				Key.IsEmpty() ? TEXT("GOOGLE_MAPS_API_KEY is not set") : TEXT("Cesium3DTileset::SetUrl not found"));
+			continue;
+		}
+		struct { FString InUrl; } Params{ TEXT("https://tile.googleapis.com/v1/3dtiles/root.json?key=") + Key };
+		Tileset->ProcessEvent(SetUrl, &Params);
+		UE_LOG(LogTemp, Display, TEXT("FutureEarth: map tiles key applied to %s"), *Tileset->GetName());
 	}
 }

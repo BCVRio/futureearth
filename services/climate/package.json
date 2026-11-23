@@ -1,0 +1,12 @@
+{
+  "name": "futureearth-climate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FutureState service: projected climate for any place, year and scenario.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "egm96-universal": "^1.1.1"
+  }
+}

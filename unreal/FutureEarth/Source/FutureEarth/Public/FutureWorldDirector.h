@@ -37,6 +37,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
 	TObjectPtr<AActor> SeaSurfaceActor;
 
+	/**
+	 * For georeferenced (real-world) levels. When on, PresentSeaLevelZ is ignored and sea level
+	 * is placed from the geoid: Z = (geoid height - GeoreferenceOriginHeightM) * 100.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
+	bool bSeaLevelFromGeoid = false;
+
+	/** Ellipsoid height (m) of the Cesium georeference origin, i.e. of world Z = 0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene", meta = (EditCondition = "bSeaLevelFromGeoid"))
+	double GeoreferenceOriginHeightM = 0.0;
+
 	/** World Z (cm) of today's mean sea level in this level. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
 	double PresentSeaLevelZ = 0.0;
@@ -70,6 +81,8 @@ protected:
 private:
 	UFUNCTION()
 	void HandleState(const FClimateFutureState& State);
+
+	void ApplyMapTilesKey();
 
 	double CaptureAtSeconds = 0.0;
 	int32 CaptureFrames = 0;

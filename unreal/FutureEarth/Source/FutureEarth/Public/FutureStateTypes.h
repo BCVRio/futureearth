@@ -30,6 +30,8 @@ struct FUTUREEARTH_API FClimateFutureState
 	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") double Latitude = 0.0;
 	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") double Longitude = 0.0;
 	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") double ElevationM = 0.0;
+	/** Height of today's mean sea level above the WGS84 ellipsoid, in metres. */
+	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") double GeoidHeightM = 0.0;
 	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") int32 Year = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") EClimateScenario Scenario = EClimateScenario::CurrentPath;
 	UPROPERTY(BlueprintReadOnly, Category = "FutureEarth") EProjectionConfidence Confidence = EProjectionConfidence::Projected;

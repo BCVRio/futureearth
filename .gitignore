@@ -15,3 +15,9 @@ Build/
 *.opensdf
 *.sdf
 *.suo
+
+# Third-party plugins are downloaded, not committed (see README)
+unreal/FutureEarth/Plugins/
+
+# Cesium caches tile requests here, including URLs that contain the API key
+cesium-request-cache.sqlite*

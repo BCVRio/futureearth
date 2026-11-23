@@ -3,8 +3,8 @@
 //   GET /future?lat=..&lon=..&year=2076&scenario=ssp245
 //
 // Returns one "FutureState": the projected climate at that place and year plus
-// the 0..1 parameters the Unreal scene uses to dress the world. No dependencies;
-// run with `node server.mjs` (Node 18+).
+// the 0..1 parameters the Unreal scene uses to dress the world. One dependency;
+// run `npm install` once, then `node server.mjs` (Node 18+).
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -15,6 +15,7 @@ import {
   globalWarming, seaLevelRise, confidence,
 } from './projections.mjs';
 import { localPattern, hotDays, HOT_DAY_C } from './local.mjs';
+import egm96 from 'egm96-universal';
 
 const PORT = Number(process.env.PORT) || 8787;
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
@@ -38,7 +39,12 @@ export async function futureState(lat, lon, year, scenario) {
   const floodDepth = p.elevation_m == null ? null : Math.max(0, slr.median - p.elevation_m);
 
   return {
-    location: { lat: p.lat, lon: p.lon, elevation_m: p.elevation_m },
+    location: {
+      lat: p.lat, lon: p.lon, elevation_m: p.elevation_m,
+      // Height of today's mean sea level above the WGS84 ellipsoid (EGM96 geoid). 3D map
+      // tiles use ellipsoid heights, so the sea surface belongs at this height plus the rise.
+      geoid_height_m: round(egm96.meanSeaLevel(lat, lon)),
+    },
     year,
     scenario: { id: scenario, ...SCENARIOS[scenario] },
     confidence: confidence(year),
@@ -76,6 +82,7 @@ export async function futureState(lat, lon, year, scenario) {
       'IPCC AR6 WG1 (global temperature and sea level by SSP)',
       `Open-Meteo Climate API, CMIP6 HighResMIP downscaled to 10 km (${p.models.join(', ')})`,
       'Open-Meteo Elevation API (Copernicus DEM GLO-90)',
+      'EGM96 geoid (egm96-universal)',
     ],
   };
 }

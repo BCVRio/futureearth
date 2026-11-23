@@ -21,7 +21,7 @@ Full-screen video       <--video---  Water, decay, foliage, sky driven        pl
 ## Climate service
 
 ```
-node services/climate/server.mjs      # http://localhost:8787  (Node 18+, no dependencies)
+cd services/climate && npm install && node server.mjs      # http://localhost:8787  (Node 18+)
 GET /future?lat=25.79&lon=-80.13&year=2076&scenario=ssp245
 ```
 
@@ -52,5 +52,14 @@ UnrealEditor <path>\FutureEarth.uproject /Game/FutureEarth/Maps/TestStreet -game
 ```
 
 `-FutureYear` overrides the director's year; `-FutureEarthCapture=<seconds>` saves `Saved/Screenshots/FutureEarthCapture.png` and quits. Reference captures are in `design/captures`.
+
+### Real-world level
+
+`Scripts/build_real_world.py` generates `Content/FutureEarth/Maps/RealWorld`: Google Photorealistic 3D Tiles at a real coordinate through Cesium for Unreal, with the same director and sea surface.
+
+Setup, once per machine:
+
+1. Unpack the UE 5.8 build of [Cesium for Unreal](https://github.com/CesiumGS/cesium-unreal/releases) into `unreal/FutureEarth/Plugins/CesiumForUnreal` (not committed; about 5 GB). The first project build compiles it and takes a while.
+2. Create a Google Maps Platform API key with **Map Tiles API** enabled and put it in the `GOOGLE_MAPS_API_KEY` environment variable. The key is applied to tilesets tagged `GoogleTiles` at runtime and is never written into a level or this repository.
 
 Known limits are listed in each response under `caveats`; the global anchor tables in `projections.mjs` still need checking against the published IPCC tables.

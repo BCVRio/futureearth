@@ -16,6 +16,7 @@
 		{ "Name": "GeoReferencing", "Enabled": true },
 		{ "Name": "SunPosition", "Enabled": true },
 		{ "Name": "PythonScriptPlugin", "Enabled": true },
-		{ "Name": "EditorScriptingUtilities", "Enabled": true }
+		{ "Name": "EditorScriptingUtilities", "Enabled": true },
+		{ "Name": "CesiumForUnreal", "Enabled": true }
 	]
 }
