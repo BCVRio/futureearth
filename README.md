@@ -66,6 +66,15 @@ Setup, once per machine:
 
 `SFutureEarthHud` (Slate, in C++) is added by the director when `bShowHud` is on: year, years ahead, confidence badge, three data chips, the scenario switch and the time dial (Now, +50, +100, +200, +500 at equal spacing). Pass `-FutureEarthNoHud` to hide it.
 
+### Phone window
+
+Streams the scene from this PC to a phone browser on the same Wi-Fi with Pixel Streaming; turning the phone looks around.
+
+1. Once: copy `<UE>/Engine/Plugins/Media/PixelStreaming2/Resources/WebServers` to `streaming/` (git-ignored), then in `streaming/` run `npm install --workspace Common --workspace Signalling --workspace SignallingWebServer` and `npm run build:cjs` in `Common` and `Signalling`, `npm run build` in `SignallingWebServer`.
+2. `powershell -File phonestart_phone_stream.ps1` starts the server and Unreal and prints the phone address.
+
+`phone/futureearth-phone.js` sends the phone orientation as East-North-Up vectors; `AFutureWorldDirector::SetViewDirectionENU` applies them. iPhones need https for motion sensors, so the script makes a self-signed certificate for the PC's LAN address.
+
 ### Look
 
 - `M_Water`: single-layer water with drifting wave normals and depth-based colour.

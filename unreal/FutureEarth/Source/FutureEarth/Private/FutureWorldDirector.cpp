@@ -5,6 +5,10 @@
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "GameFramework/PlayerController.h"
+#include "Components/ActorComponent.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Engine/GameInstance.h"
 #include "EngineUtils.h"
 #include "Misc/CommandLine.h"
@@ -26,6 +30,7 @@ void AFutureWorldDirector::BeginPlay()
 	// Test overrides: -FutureYear=2526 on the command line.
 	FParse::Value(FCommandLine::Get(), TEXT("FutureYear="), Year);
 	ApplyMapTilesKey();
+	ListenForPhone();
 	if (bShowHud && !FParse::Param(FCommandLine::Get(), TEXT("FutureEarthNoHud")))
 	{
 		ShowHud();
@@ -190,5 +195,61 @@ void AFutureWorldDirector::ShowHud()
 		FInputModeGameAndUI Mode;
 		Mode.SetHideCursorDuringCapture(false);
 		Player->SetInputMode(Mode);
+	}
+}
+
+void AFutureWorldDirector::ListenForPhone()
+{
+	// Pixel Streaming delivers messages from the web page through its input component.
+	// It is reached by reflection so this module builds without linking the plugin.
+	UClass* InputClass = FindObject<UClass>(nullptr, TEXT("/Script/PixelStreaming2.PixelStreaming2Input"));
+	FMulticastDelegateProperty* OnInput = InputClass ? FindFProperty<FMulticastDelegateProperty>(InputClass, TEXT("OnInputEvent")) : nullptr;
+	if (!OnInput)
+	{
+		return; // Pixel Streaming is not enabled.
+	}
+	UActorComponent* Input = NewObject<UActorComponent>(this, InputClass, TEXT("PhoneInput"));
+	Input->RegisterComponent();
+	FScriptDelegate Handler;
+	Handler.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(AFutureWorldDirector, HandlePhoneMessage));
+	OnInput->AddDelegate(MoveTemp(Handler), Input);
+}
+
+void AFutureWorldDirector::HandlePhoneMessage(const FString& Descriptor)
+{
+	// {"f":[east,north,up],"u":[east,north,up]} : where the back of the phone points, and its top edge.
+	TSharedPtr<FJsonObject> Message;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Descriptor), Message) || !Message.IsValid())
+	{
+		return;
+	}
+	const TArray<TSharedPtr<FJsonValue>>* F = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* U = nullptr;
+	if (Message->TryGetArrayField(TEXT("f"), F) && Message->TryGetArrayField(TEXT("u"), U) && F->Num() == 3 && U->Num() == 3)
+	{
+		SetViewDirectionENU(
+			FVector((*F)[0]->AsNumber(), (*F)[1]->AsNumber(), (*F)[2]->AsNumber()),
+			FVector((*U)[0]->AsNumber(), (*U)[1]->AsNumber(), (*U)[2]->AsNumber()));
+	}
+}
+
+void AFutureWorldDirector::SetViewDirectionENU(FVector Forward, FVector Up)
+{
+	if (Forward.IsNearlyZero() || Up.IsNearlyZero())
+	{
+		return;
+	}
+	// East-North-Up to Unreal with Cesium's axes (X east, Y south, Z up).
+	const FVector UnrealForward(Forward.X, -Forward.Y, Forward.Z);
+	const FVector UnrealUp(Up.X, -Up.Y, Up.Z);
+	const FRotator Rotation = FRotationMatrix::MakeFromXZ(UnrealForward, UnrealUp).Rotator();
+
+	if (APlayerController* Player = GetWorld()->GetFirstPlayerController())
+	{
+		Player->SetControlRotation(Rotation);
+		if (AActor* Target = Player->GetViewTarget())
+		{
+			Target->SetActorRotation(Rotation);
+		}
 	}
 }

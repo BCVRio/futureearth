@@ -76,6 +76,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
 	void SetLocation(double NewLatitude, double NewLongitude);
 
+	/**
+	 * Point the view along a direction given in East-North-Up axes, e.g. from a phone's
+	 * orientation sensors. Assumes the level uses Cesium's default axes: X east, Y south, Z up.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
+	void SetViewDirectionENU(FVector Forward, FVector Up);
+
 	/** Re-request the state for the current place, year and scenario. */
 	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
 	void Refresh();
@@ -95,6 +102,10 @@ private:
 
 	void ApplyMapTilesKey();
 	void ShowHud();
+	void ListenForPhone();
+
+	UFUNCTION()
+	void HandlePhoneMessage(const FString& Descriptor);
 
 	FClimateFutureState LastState;
 	bool bHasState = false;

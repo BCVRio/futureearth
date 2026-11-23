@@ -21,3 +21,6 @@ unreal/FutureEarth/Plugins/
 
 # Cesium caches tile requests here, including URLs that contain the API key
 cesium-request-cache.sqlite*
+
+# Epic Pixel Streaming servers: copied from the engine and built locally
+streaming/
