@@ -1,6 +1,10 @@
 #include "FutureWorldDirector.h"
 
 #include "ClimateSubsystem.h"
+#include "SFutureEarthHud.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "GameFramework/PlayerController.h"
 #include "Engine/GameInstance.h"
 #include "EngineUtils.h"
 #include "Misc/CommandLine.h"
@@ -22,6 +26,10 @@ void AFutureWorldDirector::BeginPlay()
 	// Test overrides: -FutureYear=2526 on the command line.
 	FParse::Value(FCommandLine::Get(), TEXT("FutureYear="), Year);
 	ApplyMapTilesKey();
+	if (bShowHud && !FParse::Param(FCommandLine::Get(), TEXT("FutureEarthNoHud")))
+	{
+		ShowHud();
+	}
 	if (UClimateSubsystem* Climate = GetGameInstance() ? GetGameInstance()->GetSubsystem<UClimateSubsystem>() : nullptr)
 	{
 		Climate->OnFutureStateUpdated.AddDynamic(this, &AFutureWorldDirector::HandleState);
@@ -31,6 +39,11 @@ void AFutureWorldDirector::BeginPlay()
 
 void AFutureWorldDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (HudWidget.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(HudWidget.ToSharedRef());
+	}
+	HudWidget.Reset();
 	if (UClimateSubsystem* Climate = GetGameInstance() ? GetGameInstance()->GetSubsystem<UClimateSubsystem>() : nullptr)
 	{
 		Climate->OnFutureStateUpdated.RemoveDynamic(this, &AFutureWorldDirector::HandleState);
@@ -74,6 +87,9 @@ void AFutureWorldDirector::Refresh()
 
 void AFutureWorldDirector::HandleState(const FClimateFutureState& State)
 {
+	LastState = State;
+	bHasState = true;
+
 	if (SeaSurfaceActor)
 	{
 		FVector Location = SeaSurfaceActor->GetActorLocation();
@@ -123,7 +139,7 @@ void AFutureWorldDirector::Tick(float DeltaSeconds)
 	if (CaptureShotFrame < 0 && FPlatformTime::Seconds() >= CaptureAtSeconds && CaptureFrames >= 90)
 	{
 		CaptureShotFrame = CaptureFrames;
-		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Screenshots/FutureEarthCapture.png"), false, false);
+		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Screenshots/FutureEarthCapture.png"), true, false);
 	}
 	else if (CaptureShotFrame >= 0 && CaptureFrames >= CaptureShotFrame + 60)
 	{
@@ -155,5 +171,24 @@ void AFutureWorldDirector::ApplyMapTilesKey()
 		struct { FString InUrl; } Params{ TEXT("https://tile.googleapis.com/v1/3dtiles/root.json?key=") + Key };
 		Tileset->ProcessEvent(SetUrl, &Params);
 		UE_LOG(LogTemp, Display, TEXT("FutureEarth: map tiles key applied to %s"), *Tileset->GetName());
+	}
+}
+
+void AFutureWorldDirector::ShowHud()
+{
+	if (!GEngine || !GEngine->GameViewport)
+	{
+		return; // No viewport, e.g. a headless run.
+	}
+	HudWidget = SNew(SFutureEarthHud).Director(this);
+	GEngine->GameViewport->AddViewportWidgetContent(HudWidget.ToSharedRef(), 10);
+
+	// The dial and scenario switch need a visible cursor that can click the interface.
+	if (APlayerController* Player = GetWorld()->GetFirstPlayerController())
+	{
+		Player->bShowMouseCursor = true;
+		FInputModeGameAndUI Mode;
+		Mode.SetHideCursorDuringCapture(false);
+		Player->SetInputMode(Mode);
 	}
 }

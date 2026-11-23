@@ -6,6 +6,6 @@ public class FutureEarth : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
-		PrivateDependencyModuleNames.AddRange(new[] { "HTTP", "Json" });
+		PrivateDependencyModuleNames.AddRange(new[] { "HTTP", "Json", "Slate", "SlateCore" });
 	}
 }

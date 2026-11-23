@@ -56,6 +56,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth|Scene")
 	TObjectPtr<UMaterialParameterCollection> ClimateParameters;
 
+	/** Show the built-in on-screen interface (year, data chips, scenario switch, time dial). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FutureEarth")
+	bool bShowHud = true;
+
+	/** True once the first climate state has arrived. */
+	UFUNCTION(BlueprintPure, Category = "FutureEarth")
+	bool HasState() const { return bHasState; }
+
+	UFUNCTION(BlueprintPure, Category = "FutureEarth")
+	const FClimateFutureState& GetLastState() const { return LastState; }
+
 	UFUNCTION(BlueprintCallable, Category = "FutureEarth")
 	void SetYear(int32 NewYear);
 
@@ -83,6 +94,11 @@ private:
 	void HandleState(const FClimateFutureState& State);
 
 	void ApplyMapTilesKey();
+	void ShowHud();
+
+	FClimateFutureState LastState;
+	bool bHasState = false;
+	TSharedPtr<class SWidget> HudWidget;
 
 	double CaptureAtSeconds = 0.0;
 	int32 CaptureFrames = 0;

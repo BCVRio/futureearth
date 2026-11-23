@@ -62,6 +62,10 @@ Setup, once per machine:
 1. Unpack the UE 5.8 build of [Cesium for Unreal](https://github.com/CesiumGS/cesium-unreal/releases) into `unreal/FutureEarth/Plugins/CesiumForUnreal` (not committed; about 5 GB). The first project build compiles it and takes a while.
 2. Create a Google Maps Platform API key with **Map Tiles API** enabled and put it in the `GOOGLE_MAPS_API_KEY` environment variable. The key is applied to tilesets tagged `GoogleTiles` at runtime and is never written into a level or this repository.
 
+### Interface
+
+`SFutureEarthHud` (Slate, in C++) is added by the director when `bShowHud` is on: year, years ahead, confidence badge, three data chips, the scenario switch and the time dial (Now, +50, +100, +200, +500 at equal spacing). Pass `-FutureEarthNoHud` to hide it.
+
 ### Look
 
 - `M_Water`: single-layer water with drifting wave normals and depth-based colour.
