@@ -56,7 +56,8 @@ void UClimateSubsystem::RequestFutureState(double Latitude, double Longitude, in
 	// The first request for a new place downloads decades of model data and can take over a minute.
 	Request->SetTimeout(240.f);
 	Request->OnProcessRequestComplete().BindUObject(this, &UClimateSubsystem::HandleResponse, Serial);
-	Request->ProcessRequest();
+	const bool bStarted = Request->ProcessRequest();
+	UE_LOG(LogFutureEarth, Display, TEXT("Requesting %s (started=%d)"), *Url, bStarted);
 }
 
 void UClimateSubsystem::HandleResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnected, int32 Serial)

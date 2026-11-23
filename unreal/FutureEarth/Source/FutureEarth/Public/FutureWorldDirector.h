@@ -64,9 +64,14 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	UFUNCTION()
 	void HandleState(const FClimateFutureState& State);
+
+	double CaptureAtSeconds = 0.0;
+	int32 CaptureFrames = 0;
+	int32 CaptureShotFrame = -1;
 };
